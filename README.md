@@ -14,7 +14,6 @@ To see full example code for de novo machine learning, prediction of sgRNA activ
 * Scikit-learn 
 * bxpython (v0.5.0, https://github.com/bxlab/bx-python)
 * Pysam
-* [ScreenProcessing](https://github.com/mhorlbeck/ScreenProcessing)
 
 External command line applications required:
 * ViennaRNA
