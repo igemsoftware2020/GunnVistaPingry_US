@@ -6,13 +6,14 @@ import multiprocessing
 import numpy as np 
 import scipy as sp 
 import pandas as pd
-from ConfigParser import SafeConfigParser
+from configparser import SafeConfigParser
 from Bio import Seq, SeqIO
 import pysam
 from bx.bbi.bigwig_file import BigWigFile
-from sklearn import linear_model, svm, ensemble, preprocessing, grid_search, metrics
+from sklearn import linear_model, svm, ensemble, preprocessing,  metrics
+from sklearn.model_selection import GridSearchCV
 
-from expt_config_parser import parseExptConfig, parseLibraryConfig
+#from expt_config_parser import parseExptConfig, parseLibraryConfig
 
 ###############################################################################
 #                   Import and Merge Training/Test Data                       #
@@ -29,17 +30,18 @@ def loadExperimentData(experimentFile, supportedLibraryPath, library, basePath =
 	for exptConfigFile in parser.sections():
 		configDict = parseExptConfig(exptConfigFile,libDict)[0]
 
+           
 		libraryTable = pd.read_csv(os.path.join(basePath,configDict['output_folder'],configDict['experiment_name']) + '_librarytable.txt',
-			sep='\t', index_col=range(1), header=0)
+			sep='\t', index_col=[0], header=0)
 		libraryTableDict[configDict['experiment_name']] = libraryTable
 
 		geneTable = pd.read_csv(os.path.join(basePath,configDict['output_folder'],configDict['experiment_name']) + '_genetable.txt',
-			sep='\t',index_col=range(2),header=range(3))
+			sep='\t',index_col=[0,1],header=[0,1,2])
 		phenotypeTable = pd.read_csv(os.path.join(basePath,configDict['output_folder'],configDict['experiment_name']) + '_phenotypetable.txt',\
-			sep='\t',index_col=range(1),header=range(2))
+			sep='\t',index_col=[0],header=[0,1])
 
 		condTups = [(condStr.split(':')[0],condStr.split(':')[1]) for condStr in parser.get(exptConfigFile, 'condition_tuples').strip().split('\n')]
-		# print condTups
+    
 
 		geneTableDict[configDict['experiment_name']] = geneTable.loc[:,[level_name for level_name in geneTable.columns if (level_name[0],level_name[1]) in condTups]]
 		phenotypeTableDict[configDict['experiment_name']] = phenotypeTable.loc[:,[level_name for level_name in phenotypeTable.columns if (level_name[0],level_name[1]) in condTups]]
@@ -63,7 +65,7 @@ def calculateDiscriminantScores(geneTable, effectSize = 'average phenotype of st
 	pvals = -1 * np.log10(geneTable_reordered[pValue])
 
 	seriesDict = dict()
-	for group, table in pd.concat((zscores, pvals), keys=(effectSize,pValue),axis=1).reorder_levels((1,2,3,0), axis=1).groupby(level=range(3),axis=1):
+	for group, table in pd.concat((zscores, pvals), keys=(effectSize,pValue),axis=1).reorder_levels((1,2,3,0), axis=1).groupby(level=[0,1,2],axis=1):
 		# print table.head()
 		seriesDict[group] = table[group].apply(lambda row: row[effectSize] * row[pValue], axis=1)
 
@@ -82,9 +84,9 @@ def getNormalizedsgRNAsOverThresh(libraryTable, phenotypeTable, discriminantTabl
 		if (transcripts and name[0] == 'negative_control') or (not transcripts and name == 'negative_control'):
 			continue
 		maxDisc = maxDiscriminants.loc[name]
-
+#iGEM python3 data fraom doesnt have sort and replaced with sort_values
 		if not transcripts:
-			maxDisc = maxDisc.sort('best score').iloc[-1]
+			maxDisc = maxDisc.sort_values('best score').iloc[-1]
 
 		if maxDisc['best score'] >= threshold:
 			bestGroup = group[maxDisc['best col']]
@@ -116,6 +118,32 @@ def getGeneFolds(libraryTable, kfold, transcripts=True):
 
 	return folds
 
+def getGeneFoldsEx(libraryTable, kfold, transcripts=True):
+	if transcripts:
+		geneGroups = pd.Series(range(len(libraryTable)), index=libraryTable.index).groupby((libraryTable['gene'],libraryTable['transcripts']))
+	else:
+		geneGroups = pd.Series(range(len(libraryTable)), index=libraryTable.index).groupby(libraryTable['gene'])
+
+	idxList = np.arange(geneGroups.ngroups)
+	np.random.shuffle(idxList)
+
+	foldsize = int(np.floor(geneGroups.ngroups * 1.0 / kfold))
+#iGEM keep test size to one group    
+	foldsize = 1
+	folds = []
+	for i in range(kfold):
+		testGroups = []
+		trainGroups = []
+		testSet = set(idxList[i * foldsize: (i+1) * foldsize])
+		for i, (name, group) in enumerate(geneGroups):
+			if i in testSet:
+				testGroups.extend(group.values)
+			else:
+				trainGroups.extend(group.values)
+		folds.append((trainGroups,testGroups))
+
+	return folds
+
 
 ###############################################################################
 #                           Calculate sgRNA Parameters                        #
@@ -125,12 +153,19 @@ def generateTssTable(geneTable, libraryTssFile, cagePeakFile, cageWindow, aliasD
 	codingTssList = []
 	with open(libraryTssFile) as infile:
 		for line in infile:
-			linesplit = line.strip().split('\t')
+			#linesplit = line.strip().split('\t')
+			linesplit = line.split('\t')
 			try:
-				chrom = int(linesplit[2][3:])
+#				chrom = int(linesplit[2][3:])
+				chrom = int(linesplit[4][3:])
 			except ValueError:
-				chrom = linesplit[2][3:]
-			codingTssList.append((chrom, int(linesplit[3]), linesplit[0], linesplit[1], linesplit[2], linesplit[3], linesplit[4]))
+#				chrom = linesplit[2][3:]
+				chrom = linesplit[4][3:]
+			except IndexError as error:
+				print ("Index Error: ",linesplit,line, len(linesplit))
+                
+#			codingTssList.append((chrom, int(linesplit[3]), linesplit[0], linesplit[1], linesplit[2], linesplit[3], linesplit[4]))
+			codingTssList.append((chrom, int(float(linesplit[2].strip() or 0)), linesplit[0], linesplit[1], linesplit[4], linesplit[2], linesplit[3]))
 
 	codingTupDict = {(tup[2],tup[3]):tup for tup in codingTssList}
 
@@ -149,6 +184,8 @@ def generateTssTable(geneTable, libraryTssFile, cagePeakFile, cageWindow, aliasD
 			positionList.append((np.nan,np.nan,np.nan))
 			continue
 			
+			#iGEM
+		trans =''
 		if transcriptList == 'all':
 			positions = [codingTupDict[(gene, trans)][1] for trans in codingGeneToTransList[gene]]
 		else:
@@ -228,7 +265,7 @@ def generateTssTable_P1P2strategy(tssTable, cagePeakFile, matchedp1p2Window, any
 
 		if len(p1Matches) >= 1:
 			if len(p1Matches) > 1:
-				print 'multiple matched p1:', gene, p1Matches, p2Matches #rare event, typically a doubly-named TSS, basically at the same spot
+				print ('multiple matched p1:', gene, p1Matches, p2Matches) #rare event, typically a doubly-named TSS, basically at the same spot
 
 				closestMatch = p1Matches[0]
 				for match in p1Matches:
@@ -237,7 +274,7 @@ def generateTssTable_P1P2strategy(tssTable, cagePeakFile, matchedp1p2Window, any
 				p1Matches = [closestMatch]
 
 			if len(p2Matches) > 1:
-				print 'multiple matched p2:', gene, p1Matches, p2Matches
+				print ('multiple matched p2:', gene, p1Matches, p2Matches)
 
 				closestMatch = p2Matches[0]
 				for match in p2Matches:
@@ -269,7 +306,7 @@ def generateTssTable_P1P2strategy(tssTable, cagePeakFile, matchedp1p2Window, any
 
 			if len(p1Matches) >=1:
 				if len(p1Matches) > 1:
-					print 'multiple nearby p1:', gene, p1Matches, p2Matches
+					print ('multiple nearby p1:', gene, p1Matches, p2Matches)
 
 					closestMatch = p1Matches[0]
 					for match in p1Matches:
@@ -278,7 +315,7 @@ def generateTssTable_P1P2strategy(tssTable, cagePeakFile, matchedp1p2Window, any
 					p1Matches = [closestMatch]
 
 				if len(p2Matches) > 1:
-					print 'multiple nearby p2:', gene, p1Matches, p2Matches 
+					print ('multiple nearby p2:', gene, p1Matches, p2Matches )
 
 					closestMatch = p2Matches[0]
 					for match in p2Matches:
@@ -327,7 +364,7 @@ def generateSgrnaDistanceTable_p1p2Strategy(sgInfoTable, libraryTable, p1p2Table
 		for name, group in sgInfoTable['pam coordinate'].groupby(libraryTable['gene']):
 			if name in p1p2Table.index:
 				tssRow = p1p2Table.loc[name]
-
+                
 				if len(tssRow) == 1:
 					tssRow = tssRow.iloc[0]
 					for sgId, pamCoord in group.iteritems():
@@ -382,7 +419,7 @@ def generateSgrnaDistanceTable_p1p2Strategy(sgInfoTable, libraryTable, p1p2Table
 								(pamCoord - tssRow['secondary TSS'][0]) * -1))
 
 				else:
-					print name, tssRow
+					print (name, tssRow)
 					raise ValueError('all gene/trans pairs should be unique')
 
 	return pd.DataFrame(sgDistanceSeries, columns=['sgId', 'gene', 'transcript', 'primary TSS-Up', 'primary TSS-Down', 'secondary TSS-Up', 'secondary TSS-Down']).set_index(keys=['sgId'])
@@ -439,8 +476,9 @@ def generateRelativeBasesAndStrand(sgInfoTable, tssTable, libraryTable, genomeDi
 			strands.append(True if sgInfo['strand'] == strand else False)
 
 			baseMatrix = []
+			#iGEM in python 3 for whatever reason range pos is not treated as integer and gave index out of range issues
 			for pos in np.arange(-30,10):
-				baseMatrix.append(getBaseRelativeToPam(chrom, sgInfo['pam coordinate'],sgInfo['length'], sgInfo['strand'], pos, genomeDict))
+				baseMatrix.append(getBaseRelativeToPam(chrom, sgInfo['pam coordinate'],sgInfo['length'], sgInfo['strand'], int(pos), genomeDict))
 			relbases.append(baseMatrix)
 
 	relbases = pd.DataFrame(relbases, index = sgIds, columns = np.arange(-30,10)).loc[libraryTable.index]
@@ -462,13 +500,16 @@ def generateBooleanDoubleBaseTable(baseTable):
 		for b2 in ['A','G','C','T']:
 			for i in np.arange(-30,8):
 				doubleBaseTable.append(pd.concat((baseTable[i] == b1, baseTable[i+1] == b2),axis=1).all(axis=1))
-				tableCols.append(((b1,b2),i))
+                #iGEM
+#				tableCols.append(((b1,b2),i))
+				tableCols.append(b1+b2+str(i))
 	return pd.concat(doubleBaseTable, keys=tableCols, axis=1)
 
 def getBaseRelativeToPam(chrom, pamPos, length, strand, relPos, genomeDict):
 	rc = {'A':'T','T':'A','G':'C','C':'G','N':'N'}
-	#print chrom, pamPos, relPos
+	#print (chrom,pamPos,relPos,strand)
 	if strand == '+':
+		#print (genomeDict[chrom.strip()][pamPos - relPos].upper())
 		return rc[genomeDict[chrom][pamPos - relPos].upper()]
 	elif strand == '-':
 		return genomeDict[chrom][pamPos + relPos].upper()
@@ -551,7 +592,8 @@ def parseViennaPairing(viennaOutputFile, libraryTable):
 	return pd.DataFrame(paired, index=libraryTable.index, columns = range(-20,-2))
 
 def getChromatinDataSeries(bigwigFile, libraryTable, sgInfoTable, tssTable, colname = '', naValue = 0):
-	bwindex = BigWigFile(open(bigwigFile))
+#iGEM
+	bwindex = BigWigFile(open(bigwigFile,'rb'))
 	chromDict = tssTable['chromosome'].to_dict()
 
 	chromatinScores = []
@@ -569,7 +611,7 @@ def getChromatinDataSeries(bigwigFile, libraryTable, sgInfoTable, tssTable, coln
 
 		chrom = chromDict[geneTup]
 		
-		chromatinArray = bwindex.get_as_array(chrom, min(sgInfo['pam coordinate'], sgRange), max(sgInfo['pam coordinate'], sgRange))
+		chromatinArray = bwindex.get_as_array(bytes(chrom,'utf-8'), min(sgInfo['pam coordinate'], sgRange), max(sgInfo['pam coordinate'], sgRange))
 		if chromatinArray is not None and len(chromatinArray) > 0:
 			chromatinScores.append(np.nanmean(chromatinArray))
 		else: #often chrY when using K562 data..
@@ -589,8 +631,8 @@ def getChromatinDataSeriesByGene(bigwigFileHandle, libraryTable, sgInfoTable, p1
 		tssRow = p1p2Table.loc[[(gene, transcript)]].iloc[0,:]
 
 		chrom = tssRow['chromosome']
-
-		normWindowArray = bwindex.get_as_array(chrom, max(0, tssRow['primary TSS'][0] - normWindow), tssRow['primary TSS'][0] + normWindow)
+#iGEM
+		normWindowArray = bwindex.get_as_array(bytes(chrom,'utf-8'), max(0, tssRow['primary TSS'][0] - normWindow), tssRow['primary TSS'][0] + normWindow)
 		if normWindowArray is not None:
 			normFactor = np.nanmax(normWindowArray)
 		else:
@@ -598,7 +640,7 @@ def getChromatinDataSeriesByGene(bigwigFileHandle, libraryTable, sgInfoTable, p1
 
 		windowMin = max(0, min(sgInfoGroup['pam coordinate']) - max(sgInfoGroup['length']) - 10)
 		windowMax = max(sgInfoGroup['pam coordinate']) + max(sgInfoGroup['length']) + 10
-		chromatinWindow = bwindex.get_as_array(chrom, windowMin, windowMax)
+		chromatinWindow = bwindex.get_as_array(bytes(chrom,'utf-8'), windowMin, windowMax)
 
 		chromatinScores.append(sgInfoGroup.apply(lambda row: getChromatinData(row, chromatinWindow, windowMin, normFactor), axis=1))
 
@@ -656,6 +698,8 @@ def generateTypicalParamTable(libraryTable, sgInfoTable, tssTable, p1p2Table, ge
 	rnafolding = getRNAfoldingTable(libraryTable)
 
 	printNow('Done!')
+#iGEM
+          
 
 	return pd.concat([lengthSeries,
 		   sgrnaPositionTable_p1p2.iloc[:,2:],
@@ -683,7 +727,73 @@ def generateTypicalParamTable(libraryTable, sgInfoTable, tssTable, p1p2Table, ge
 		   'accessibility',
 		   'RNA folding-no scaffold',
 		   'RNA folding-with scaffold',
-		   'RNA folding-pairing, no scaffold'],axis=1)
+		   'RNA folding-pairing, no scaffold'],axis=1 )
+
+def generateTypicalParamTableEx(libraryTable, sgInfoTable, tssTable, p1p2Table, genomeDict, bwFileHandleDict, transcripts=False):
+	lengthSeries = generateSgrnaLengthSeries(libraryTable)
+
+	# sgrnaPositionTable = generateSgrnaDistanceTable(sgInfoTable, tssTable, libraryTable)
+	sgrnaPositionTable_p1p2 = generateSgrnaDistanceTable_p1p2Strategy(sgInfoTable, libraryTable, p1p2Table, transcripts)
+
+	baseTable, strand = generateRelativeBasesAndStrand(sgInfoTable, tssTable, libraryTable, genomeDict)
+	booleanBaseTable = generateBooleanBaseTable(baseTable)
+	doubleBaseTable = generateBooleanDoubleBaseTable(baseTable)
+
+	printNow('.')
+	baseList = ['A','G','C','T']
+	homopolymerTable = pd.concat([libraryTable.apply(lambda row: np.floor(getMaxLengthHomopolymer(row['sequence'], base)), axis=1) for base in baseList],keys=baseList,axis=1)
+
+	baseFractions = pd.concat([libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['A']),axis=1),
+							libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['G']),axis=1),
+							libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['C']),axis=1),
+							libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['T']),axis=1),
+							libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['G','C']),axis=1),
+							libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['G','A']),axis=1),
+							libraryTable.apply(lambda row: getFractionBaseList(row['sequence'], ['C','A']),axis=1)],keys=['A','G','C','T','GC','purine','CA'],axis=1)
+
+	printNow('.')
+
+	dnaseSeries = getChromatinDataSeriesByGene(bwFileHandleDict['dnase'], libraryTable, sgInfoTable, p1p2Table, sgrnaPositionTable_p1p2)
+	printNow('.')
+	faireSeries = getChromatinDataSeriesByGene(bwFileHandleDict['faire'], libraryTable, sgInfoTable, p1p2Table, sgrnaPositionTable_p1p2)
+	printNow('.')
+	mnaseSeries = getChromatinDataSeriesByGene(bwFileHandleDict['mnase'], libraryTable, sgInfoTable, p1p2Table, sgrnaPositionTable_p1p2)
+	printNow('.')
+
+	rnafolding = getRNAfoldingTable(libraryTable)
+
+	printNow('Done!')
+#iGEM
+          
+
+	return pd.concat([lengthSeries,
+		   sgrnaPositionTable_p1p2.iloc[:,2:],
+#		   homopolymerTable,
+#		   baseFractions,
+		   strand,
+#		   booleanBaseTable['A'],
+#		   booleanBaseTable['T'],
+#		   booleanBaseTable['G'],
+#		   booleanBaseTable['C'],
+#		   doubleBaseTable,
+#		   pd.concat([dnaseSeries,faireSeries,mnaseSeries],keys=['DNase','FAIRE','MNase'], axis=1),
+#		   rnafolding['no scaffold'],
+#		   rnafolding['with scaffold'],
+		   rnafolding['is Paired']],keys=['length',
+		   'distance',
+#		   'homopolymers',
+#		   'base fractions',
+		   'strand',
+#		   'base table-A',
+#		   'base table-T',
+#		   'base table-G',
+#		   'base table-C',
+#		   'base dimers',
+#		   'accessibility',
+#		   'RNA folding-no scaffold',
+#		   'RNA folding-with scaffold',
+#		   'RNA folding-pairing, no scaffold'
+           ],axis=1 )
 
 # def generateTypicalParamTable_parallel(libraryTable, sgInfoTable, tssTable, p1p2Table, genomeDict, bwFileHandleDict, processors):
 #   processPool = multiprocessing.Pool(processors)
@@ -716,10 +826,12 @@ def fitParams(paramTable, scoreTable, fitTable):
 			parameters = fitRow['params'] 
 			
 			svr = svm.SVR(cache_size=500)
-			clf = grid_search.GridSearchCV(svr, parameters, n_jobs=16, verbose=0)
-			clf.fit(col_reshape, scoreTable)
+			clf = GridSearchCV(svr, parameters, n_jobs=16, verbose=0)
+#iGEM in 3.8 clf.fit is giving a waring to change it ravel 
+#			clf.fit(col_reshape, scoreTable)
+			clf.fit(col_reshape, np.ravel(scoreTable))
 
-			print name, clf.best_params_
+			print (name, clf.best_params_)
 			predictedParams.append(pd.Series(clf.predict(col_reshape), index=col.index, name=name))
 			estimators.append(clf.best_estimator_)
 
@@ -743,7 +855,7 @@ def fitParams(paramTable, scoreTable, fitTable):
 			assignedBins = binValues(col, parameters['bin width'], parameters['min edge data'])
 			binGroups = scoreTable.groupby(assignedBins) 
 			groupStats = binGroups.agg(parameters['bin function'])
-
+    
 #             print name
 #             print pd.concat((groupStats,scoreTable.groupby(assignedBins).size()), axis=1)
 			
@@ -914,6 +1026,7 @@ def findAllGuides(p1p2Table, genomeDict, rangeTup, sgRNALength=20):
 
 ###############################################################################
 #                               Utility Functions                             #
+#iGEM:  Modfy file long to int as there is no long in py3
 ###############################################################################
 def getPseudoIndices(table):
 	return table.apply(lambda row: row.name[0][:6] == 'pseudo', axis=1)
@@ -921,7 +1034,7 @@ def getPseudoIndices(table):
 def loadGencodeData(gencodeGTF, indexByENSG = True):
 	printNow('Loading annotation file...')
 	gencodeData = dict()
-	with open(gencodeGTF) as gencodeFile:
+	with open(gencodeGTF,'r') as gencodeFile:
 		for line in gencodeFile:
 			if line[0] != '#':
 				linesplit = line.strip().split('\t')
@@ -939,9 +1052,9 @@ def loadGencodeData(gencodeGTF, indexByENSG = True):
 					continue
 				
 				if linesplit[2] == 'gene':# and attrdict['gene_type'] == 'protein_coding':
-					gencodeData[dictKey] = ([linesplit[0],long(linesplit[3]),long(linesplit[4]),linesplit[6], attrdict],[])
+					gencodeData[dictKey] = ([linesplit[0],int(linesplit[3]),int(linesplit[4]),linesplit[6], attrdict],[])
 				elif linesplit[2] == 'transcript':
-					gencodeData[dictKey][1].append([linesplit[0],long(linesplit[3]),long(linesplit[4]),linesplit[6], attrdict])
+					gencodeData[dictKey][1].append([linesplit[0],int(linesplit[3]),int(linesplit[4]),linesplit[6], attrdict])
 
 	printNow('Done\n')
 
@@ -979,7 +1092,7 @@ def matchPeakName(peakName, geneAliasList, promoterRank):
 			return True
 		
 		if len(peakSplit) > 2:
-			print peakName
+			print (peakName)
 		
 	return False
 
@@ -989,12 +1102,20 @@ def generateAliasDict(hgncFile, gencodeData):
 	geneToAliases = dict()
 	geneToENSG = dict()
 
-	for i, row in hgncTable.iterrows():
-		geneToAliases[row['Approved Symbol']] = [row['Approved Symbol']]
-		geneToAliases[row['Approved Symbol']].extend([] if len(row['Previous Symbols']) == 0 else [name.strip() for name in row['Previous Symbols'].split(',')])
-		geneToAliases[row['Approved Symbol']].extend([] if len(row['Synonyms']) == 0 else [name.strip() for name in row['Synonyms'].split(',')])
+#iGEM Approved Symbol is renamed to symbol, Previous Symbols is renamed to prev_symbol, Ensembl Gene ID to ensembl_gene_id, Synonyms to alias_symbol
 
-		geneToENSG[row['Approved Symbol']] = row['Ensembl Gene ID']
+	for i, row in hgncTable.iterrows():
+#		geneToAliases[row['Approved Symbol']] = [row['Approved Symbol']]
+#		geneToAliases[row['Approved Symbol']].extend([] if len(row['Previous Symbols']) == 0 else [name.strip() for name in row['Previous Symbols'].split(',')])
+#		geneToAliases[row['Approved Symbol']].extend([] if len(row['Synonyms']) == 0 else [name.strip() for name in row['Synonyms'].split(',')])
+
+#		geneToENSG[row['Approved Symbol']] = row['Ensembl Gene ID']
+        
+		geneToAliases[row['symbol']] = [row['symbol']]
+		geneToAliases[row['symbol']].extend([] if len(row['prev_symbol']) == 0 else [name.strip() for name in row['prev_symbol'].split(',')])
+		geneToAliases[row['symbol']].extend([] if len(row['alias_symbol']) == 0 else [name.strip() for name in row['alias_symbol'].split(',')])
+
+		geneToENSG[row['symbol']] = row['ensembl_gene_id']
 
 	# for gene in gencodeData:
 	#   if gene not in geneToAliases:
@@ -1054,6 +1175,9 @@ def parseSgId(sgId):
     #transcripts
     parseDict['transcript_list'] = remainingId.split(',')
     
+#iGEM  for iGEM temporariliy make pass_score equivalent to transcript_list
+    if not  len(remainingId):
+        parseDict['transcript_list'] = parseDict['pass_score'].split(',')
     return parseDict
 
 def parseAllSgIds(libraryTable):
@@ -1074,3 +1198,4 @@ def parseAllSgIds(libraryTable):
 def printNow(outputString):
 	sys.stdout.write(outputString)
 	sys.stdout.flush()
+
