@@ -734,6 +734,10 @@ def generateTypicalParamTableEx(libraryTable, sgInfoTable, tssTable, p1p2Table, 
 
 	# sgrnaPositionTable = generateSgrnaDistanceTable(sgInfoTable, tssTable, libraryTable)
 	sgrnaPositionTable_p1p2 = generateSgrnaDistanceTable_p1p2Strategy(sgInfoTable, libraryTable, p1p2Table, transcripts)
+	sgrnaDistance = sgrnaPositionTable_p1p2.iloc[:,2:]
+#For each column add a square parameter to linearize    
+	for column in sgrnaDistance.columns:
+		sgrnaDistance[column + 'SQR'] = sgrnaDistance[column]**2
 
 	baseTable, strand = generateRelativeBasesAndStrand(sgInfoTable, tssTable, libraryTable, genomeDict)
 	booleanBaseTable = generateBooleanBaseTable(baseTable)
@@ -767,7 +771,8 @@ def generateTypicalParamTableEx(libraryTable, sgInfoTable, tssTable, p1p2Table, 
           
 
 	return pd.concat([lengthSeries,
-		   sgrnaPositionTable_p1p2.iloc[:,2:],
+#		   sgrnaPositionTable_p1p2.iloc[:,2:],
+		   sgrnaDistance,
 #		   homopolymerTable,
 #		   baseFractions,
 		   strand,
