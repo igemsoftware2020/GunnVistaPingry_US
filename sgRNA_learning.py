@@ -773,31 +773,31 @@ def generateTypicalParamTableEx(libraryTable, sgInfoTable, tssTable, p1p2Table, 
 	return pd.concat([lengthSeries,
 #		   sgrnaPositionTable_p1p2.iloc[:,2:],
 		   sgrnaDistance,
-#		   homopolymerTable,
-#		   baseFractions,
+		   homopolymerTable,
+		   baseFractions,
 		   strand,
-#		   booleanBaseTable['A'],
-#		   booleanBaseTable['T'],
-#		   booleanBaseTable['G'],
-#		   booleanBaseTable['C'],
-#		   doubleBaseTable,
-#		   pd.concat([dnaseSeries,faireSeries,mnaseSeries],keys=['DNase','FAIRE','MNase'], axis=1),
-#		   rnafolding['no scaffold'],
-#		   rnafolding['with scaffold'],
+		   booleanBaseTable['A'],
+		   booleanBaseTable['T'],
+		   booleanBaseTable['G'],
+		   booleanBaseTable['C'],
+		   doubleBaseTable,
+		   pd.concat([dnaseSeries,faireSeries,mnaseSeries],keys=['DNase','FAIRE','MNase'], axis=1),
+		   rnafolding['no scaffold'],
+		   rnafolding['with scaffold'],
 		   rnafolding['is Paired']],keys=['length',
 		   'distance',
-#		   'homopolymers',
-#		   'base fractions',
+		   'homopolymers',
+		   'base fractions',
 		   'strand',
-#		   'base table-A',
-#		   'base table-T',
-#		   'base table-G',
-#		   'base table-C',
-#		   'base dimers',
-#		   'accessibility',
-#		   'RNA folding-no scaffold',
-#		   'RNA folding-with scaffold',
-#		   'RNA folding-pairing, no scaffold'
+		   'base table-A',
+		   'base table-T',
+		   'base table-G',
+		   'base table-C',
+		   'base dimers',
+		   'accessibility',
+		   'RNA folding-no scaffold',
+		   'RNA folding-with scaffold',
+		   'RNA folding-pairing, no scaffold'
            ],axis=1 )
 
 # def generateTypicalParamTable_parallel(libraryTable, sgInfoTable, tssTable, p1p2Table, genomeDict, bwFileHandleDict, processors):
@@ -943,13 +943,20 @@ def transformParams(paramTable, fitTable, estimators):
 			
 			assignedBins = applyBins(col, binStats.index.values)
 			binGroups = col.groupby(assignedBins)
+            
+# iGEM below logic is assuming test data will have data spread into all bins. Which is not the case in some cases and causing tranform #error at later point of time during fit   where  X Y Mismatch error is coming. At least that is the case with python 3.x and lates scikit.
+#So instead of binGroups use binStats to construct initial data frame and mark ones based on binning.
+
+#			oneHotFrame = pd.DataFrame(np.zeros((len(assignedBins),len(binGroups))), index = assignedBins.index, \
+#				columns=pd.MultiIndex.from_tuples([(name[0],', '.join([name[1],key])) for key in sorted(binGroups.groups.keys())]))
+
+			oneHotFrame = pd.DataFrame(np.zeros((len(assignedBins),len(binStats.index))), index = assignedBins.index, \
+				columns=pd.MultiIndex.from_tuples([(name[0],', '.join([name[1],key])) for key in sorted(binStats.index)]))
+
 
 #             print name
 #             print pd.concat((groupStats,scoreTable.groupby(assignedBins).size()), axis=1)
 			
-			oneHotFrame = pd.DataFrame(np.zeros((len(assignedBins),len(binGroups))), index = assignedBins.index, \
-				columns=pd.MultiIndex.from_tuples([(name[0],', '.join([name[1],key])) for key in sorted(binGroups.groups.keys())]))
-
 			for groupName, group in binGroups:
 				oneHotFrame.loc[group.index, (name[0],', '.join([name[1],groupName]))] = 1
 
