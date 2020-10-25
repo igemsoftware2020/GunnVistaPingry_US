@@ -1,12 +1,17 @@
-# CRISPRiaDesign
+# iGEM_Odigos
 
-This site hosts the sgRNA machine learning scripts used to generate the Weissman lab's next-generation CRISPRi and CRISPRa library designs [(Horlbeck et al., eLife 2016)](https://elifesciences.org/content/5/e19760). These are currently implemented as interactive scripts along with iPython notebooks with step-by-step instructions for creating new sgRNA libraries. Future plans include adding command line functions to make library design more user-friendly. Note that all sgRNA designs for CRISPRi/a human/mouse protein-coding gene libraries are included as supplementary tables in the eLife paper, so cloning of individual sgRNAs or construction of any custom sublibraries targeting protein-coding genes can simply refer to those tables. These scripts are primarily useful for the design of sgRNAs targeting novel or non-coding genes, or for organisms beyond human and mouse.
+Odigos: An Improved CRISPR-Cas9 Effective Guide RNA Predictor
 
+Abstract: CRISPRi is a powerful tool for modulating gene expression in human cells. By designing a gRNA homologous to the target gene of interest, one can achieve targeted knockdown of the specific gene of interest. However, with current methodologies, one has to screen multiple gRNA sequences for efficient targeting while minimizing off-target effects. We present a prediction model for identifying the best gRNA sequence for efficient gene targeting in human cells. Starting with experimental data from knocking down specific genes using several gRNAs in iPS cells, we leverage machine learning to inform better selection of the gRNA. Our tool will be invaluable for designing gene targeting gRNAs and will reveal underlying biochemical principles governing CRISPR efficiency.
 
-To see full example code for de novo machine learning, prediction of sgRNA activity for desired loci, and construction of new genome-scale CRISPRi/a libraries, see the CRISPRiaDesign_example_notebook (included as Jupyter notebook or [web page](CRISPRiaDesign_example_notebook.md)).
+This project contains 
+* Training and test data from Dr. Perli's collected results in Shinya Yamanaka's Lab at Gladstone Institues, UCSF
+* Source code to train a new model using RT qRT-PCR data with the pioneering code [Horlbeck et al., eLife 2016)](https://elifesciences.org/content/5/e19760)]
+* Comparative study of Weissman algorithm score, our own project's scores, and Dr. Perli's efficiency measurements of each guide.
+* A tool to generate 10 small guide RNAs using our model and analyzes off-target stringency for genes in host genome.
 
 ### Dependencies
-* Python v3.6
+* Python v3.8
 * Jupyter notebook
 * Biopython
 * Scipy/Numpy/Pandas
@@ -21,10 +26,6 @@ External command line applications required:
 
 Large genomic data files required:
 
-Links are to human genome files relied upon for the hCRISPRi-v2 and hCRISPRa-v2 machine learning--and required for the Library_design_walkthrough--but any organism/assembly may be used for design of new libraries or de novo machine learning. For convenience, **the files referenced in Library_design_walkthrough in the folder "large_data_files" are also available [here](https://ucsf.box.com/s/s4ds471in2ngjer7okavzf5cqf2ebrqj)**.
-
 * Genome sequence as FASTA ([hg19](http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/))
 * FANTOM5 TSS annotation as BED ([TSS_human](http://fantom.gsc.riken.jp/5/datafiles/phase1.3/extra/TSS_classifier/))
 * Chromatin data as BigWig ([MNase](https://www.encodeproject.org/files/ENCFF000VNN/), [DNase](https://www.encodeproject.org/files/ENCFF000SVL/), [FAIRE-seq](https://www.encodeproject.org/files/ENCFF000TLU/))
-* HGNC table of gene aliases (not strictly required for the Library_design_walkthrough but useful in some steps)
-* Ensembl annotation as GTF (not strictly required for the Library_design_walkthrough but useful in some steps and in other functions; release 74 used for the published library designs)
