@@ -15,13 +15,16 @@ This project contains
 * Jupyter notebook
 * Biopython
 * Scipy/Numpy/Pandas
-* Scikit-learn
+* Scikit-learn (On Ubuntu sklearn)
 * bxpython (v0.5.0, https://github.com/bxlab/bx-python)
 * Pysam
 * Plotly
+* xlrd
 
 External command line applications required:
 * ViennaRNA
+	* ViennaRNA binary packages for various Operating systems can be downloaded from  https://www.tbi.univie.ac.at/RNA/#binary_packages
+	* RNAfold binary from this package is used study secondary structure data.
 * Bowtie (not Bowtie2)
 
 Large genomic data files required:
@@ -30,7 +33,6 @@ Large genomic data files required:
 * FANTOM5 TSS annotation as BED ([TSS_human](http://fantom.gsc.riken.jp/5/datafiles/phase1.3/extra/TSS_classifier/))
 * Chromatin data as BigWig ([MNase](https://www.encodeproject.org/files/ENCFF000VNN/), [DNase](https://www.encodeproject.org/files/ENCFF000SVL/), [FAIRE-seq](https://www.encodeproject.org/files/ENCFF000TLU/))
 
-* For Ubuntu 20.0 systems to install the viennarna package we made it available at https://odigoscrispr.s3-us-west-1.amazonaws.com/viennarna_2.4.15-1_amd64.deb
 
 
 ### Recommended HW Configuration:
@@ -39,7 +41,9 @@ Large genomic data files required:
 
 ### Setup:
 
-* To make it easier the large_data_files referenced by our project are made available at url: https://odigoscrispr.s3-us-west-1.amazonaws.com/large_data_files.tgz
+* To make it easier the large_data_files referenced by our project are made available at url: https://odigoscrispr.s3-accelerate.amazonaws.com/large_data_files.tgz
+* Same package is also available at url: https://odigoscrispr.s3-us-west-1.amazonaws.com/large_data_files.tgz
+
 * The contents of this zip are mentioned in https://odigoscrispr.s3-us-west-1.amazonaws.com/large_data_files.README
 
 	* Install the required Python module dependencies.
@@ -55,10 +59,15 @@ Large genomic data files required:
 	* iGEM_CRISPRi_Library_Design.ipynb :  To train the model and create igem_v1_estimator that can be used to score and/or generate guideRnas.
 	* iGEM_CRISPRi_sgRna_Score_Comparision.ipynb:  To do the comparative study of scores of guideRnas across Weissman algorithm, iGEM algorithm and lab scores.
 	* iGEM_CRISPRi_Gene_Guide_Selector.ipynb:  To generate guides for a gene including offtarget filtering (Currently supports human and can be extended to different hosts)
+		
+	* Walk through of above note books also made available with corresponding html extension.
 	
-	* We also made the python version of the above notebooks available that can be run in python 3.8 environment once dependencies are installed.
-	
-	* Walk through of above note books also made available in html extension.
-	
-	
+### MAC OS X:
 
+* We observed it is easier to setup of these packages and run our packages using Jupyter Notebook in Anaconda NAVIGATOR
+* Add bioconda,conda-forge to Anaconda default channel to install some of required packages above
+* On Some Mac systems we observed RNAfold giving an error about missing  libmpfr.4.dylib. 
+	*If required install mpfr using "brew install mpfr" and ensure lib libmpfr.4.dylib is accessible to RNAfold binary.
+* bowtie can be installed from the following location https://sourceforge.net/projects/bowtie-bio/files/bowtie/1.3.0/bowtie-1.3.0-macos-x86_64.zip/download
+		*Please ensure bowtie is add to PATH so that it can be invoked by our modules to run bowtie to do alignment related study.
+	
